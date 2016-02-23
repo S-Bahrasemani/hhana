@@ -69,7 +69,7 @@ WEIGHTS = {
 YEAR_VARIABLES = {
     2011: {
         'RunNumber' : {
-            'title': r'RunNumber',
+            'title': 'RunNumber',
             'root': 'Run Number',
             'filename': 'runnumber',
             'binning': [

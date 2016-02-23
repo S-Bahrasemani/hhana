@@ -17,6 +17,7 @@ if not os.path.exists(CACHE_DIR):
 ETC_DIR = os.path.join(BASE_DIR, 'etc')
 DAT_DIR = os.path.join(BASE_DIR, 'dat')
 BDT_DIR = os.path.join(BASE_DIR, 'bdts')
+BRT_DIR= "/home/sbahrase/WorkDesk/DiTauMassRec/DiTauMassSKL/RESULTS"
 
 NTUPLE_PATH = os.path.join(os.getenv('HIGGSTAUTAU_NTUPLE_DIR'), 'v6')
 # NTUPLE_PATH = '/afs/cern.ch/user/q/qbuat/work/public/xtau_output/hadhad/v1' 

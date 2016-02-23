@@ -23,15 +23,15 @@ from .defaults import (
     TRAIN_FAKES_REGION, FAKES_REGION, TARGET_REGION, NORM_FIELD)
 from statstools.utils import efficiency_cut
 
-
-Scores = namedtuple('Scores', [
-    'data',
-    'data_scores',
-    'bkg_scores',
-    'all_sig_scores',
-    'min_score',
-    'max_score',
-])
+Scores = namedtuple('Scores', 
+                    [
+        'data',
+        'data_scores',
+        'bkg_scores',
+        'all_sig_scores',
+        'min_score',
+        'max_score',
+        ])
 
 
 def get_analysis(args, **kwargs):
@@ -61,6 +61,73 @@ def get_analysis(args, **kwargs):
 
 
 class Analysis(object):
+
+    """ main analysis class.
+
+    Parameters
+    __________
+    systematics: bool, optional
+    whether to do the systematics calculations or not.
+    
+    use_embedding: bool, optional
+    if True will use the tau-embedded ztautau for z-background,
+    defalut is True.
+
+    trigger: bool, optional
+    if True will use trigger,
+    default is True
+    
+    target_region: string
+    the region for doing the analysis
+    
+    fakes_region: string 
+    region for the fakes
+    
+    decouple_qcd_shape: bool, optional
+    if True, do the qcd shape systematics separately,
+    default is False.
+
+    coherent_qcd_shape: bool, optional
+    if True, do the qcd shape systematics along side others.
+    default is True.
+
+    qcd_workspace_norm: double 
+    Val for qcd systmatics.
+    default is None.
+
+    ztt_workspace_norm: double 
+    Val,  for qcd systmatics.
+    default is None.
+    
+    constrain_norms: bool, optional.
+    asks whether to set Low, High for systmatics.
+    default is False.
+
+    random_mu: bool
+    whether to set signal strength randomly or not, 
+    default is False.
+
+    mu:double 
+    signal strength
+    default is 1.
+
+    ggf_weight: bool.
+    if True, weights the systematics.
+    default is True.
+
+    suffix: string
+    specific suffix for analysis to be added to the output files name.
+    default is None.
+    
+    norm_field: string, variable name. 
+    used to normalize qcd, ztt
+    default is "ditau_deta"
+    
+
+    Attributes
+    __________
+
+    """
 
     def __init__(self, year,
                  systematics=False,
@@ -149,6 +216,7 @@ class Analysis(object):
         self.qcd.scale = 1.
         self.ztautau.scale = 1.
 
+        ## why not to scale others ?
         self.backgrounds = [
             self.qcd,
             self.others,
@@ -159,6 +227,26 @@ class Analysis(object):
         # self.signals = self.get_signals(125)
 
     def get_signals(self, mass=125, mode=None, scale_125=False):
+
+        """ prepare signals for the analysis.
+
+        Parameters
+        ----------
+        mass: float (default=125)
+        signals masses.
+        
+        mode: str(default=None)
+        whether to combine the signals or put them in the worksapce.
+        
+        scale_125: bool,(default=False)
+        should scale signal.
+
+        Returns:
+        signals: a list of samples.Higgs objects.
+        -------
+
+        """
+        
         signals = []
         if not isinstance(mass, list):
             mass = [mass]
@@ -240,6 +328,17 @@ class Analysis(object):
         return signals
 
     def normalize(self, category):
+        """ normalize qcd, ztautau.
+        Parameters:
+        -----------
+        
+        category: Category object, for more see ../catgories/__init__.py
+
+        Returns: 
+        self: updated object
+        --------
+
+        """
         norm_cache.qcd_ztautau_norm(
             ztautau=self.ztautau,
             qcd=self.qcd,
@@ -249,6 +348,17 @@ class Analysis(object):
         return self
 
     def iter_categories(self, *definitions, **kwargs):
+        """ A generator To iterate over categories, print the categories name and cuts on fly.
+        Parameters:
+        __________
+        definitions : list
+        list of categories names.
+
+        Yiels:
+        -------
+        Category object
+
+        """        
         names = kwargs.pop('names', None)
         for definition in definitions:
             for category in CATEGORIES[definition]:
@@ -264,6 +374,19 @@ class Analysis(object):
                 yield category
 
     def get_suffix(self, clf=False, year=True):
+        """ To prepare a string suffix for the final results/plots for each specific analysis.
+        
+        Parameters
+        -----------
+        clf: bool,(default=False); is there a trained classifier available.
+        
+        year: bool(default=True); to label data11 as data12
+
+        Returns
+        --------
+         output_suffix: str; output suffix
+        """
+        
         if clf:
             output_suffix = '_%s' % TRAIN_FAKES_REGION
         else:
@@ -294,6 +417,44 @@ class Analysis(object):
                     systematics=True,
                     no_signal_fixes=False,
                     weighted=True):
+
+        """ retrieve a HistFactory.Channel object for the analysis.
+       Parameters:
+       -----------
+
+        hist_template: TH histogram template (initialized hist)
+        
+        expr_or_clf: histogram teplate for each field.
+
+        category: Category object; see more in categories/*
+        
+        region: Region object; see more in regions.py
+     
+        cuts: TCut type; additional cuts to be apply
+
+        include_signal: bool(default=True); should include signal region ?
+
+        mass: float; (default=125); signal mass
+
+        mode: str; signal produciton mode(gg, VBF, ...)
+        
+        clf: Classifier type; see more in classify.py
+
+        min_score: float; minimum of the predicted scores.
+
+        max_score: float; max of the predicted scores
+
+        systematics: bool(defualt=True); should do systematics.
+
+        no_signal_fixes: bool(default=False)
+
+        weighted: bool(default=Ture); whether to weight signal.
+
+
+        Returns
+        -------
+        histfactory.channel objects.
+        """
 
         # TODO: implement blinding
         log.info("constructing channels")
@@ -366,7 +527,12 @@ class Analysis(object):
         hybrid_data : dict
             if specified, it is a dictionary mapping the vars key to a tuple
             specifying the range to be replaced by s+b prediction.
+
+        Returns
+        field_channels: a dictionnary of histfactory channels for different variables
+        (i.e. {'MMC_MASS':channel1, ...}).
         """
+
         # TODO: implement blinding
         log.info("constructing channels")
         samples = [self.data] + self.backgrounds
@@ -447,6 +613,33 @@ class Analysis(object):
                    masses=None, mode=None, unblind=False,
                    systematics=True):
 
+        """ scores from a trained classifier.
+
+        Parameter
+        ---------
+        clf: Classifier type; trained classifier.
+
+        category: Category type.
+
+        region: Region type.
+
+        cuts: TCut; additional cuts.
+        
+        masses: list of samples masses.
+
+        mode: mode.
+        
+        unblind: bool; should do the unblind analysis
+
+        systematics: bool; whether to do the systematics or not.
+
+
+        Returns
+        -------
+        Scores: an array of data, signals and background predicted scores.
+        
+        """
+
         log.info("getting scores")
 
         min_score = float('inf')
@@ -489,7 +682,7 @@ class Analysis(object):
                     max_score = _max
 
             bkg_scores.append((bkg, scores_dict))
-
+        
         # signal scores
         all_sig_scores = {}
         if masses is not None:
@@ -530,6 +723,56 @@ class Analysis(object):
             all_sig_scores=all_sig_scores,
             min_score=min_score,
             max_score=max_score)
+
+
+    def brt_channel(self, regressor,category, region,
+                    cuts=None,
+                    bins=10,
+                    limits=None,
+                    mass=None,
+                    mode=None,
+                    systematics=True,
+                    unblind=False,
+                    hybrid_data=False,
+                    no_signal_fixes=False,
+                    uniform=False,
+                    mva=False):
+        """
+        Return a HistFactory Channel for each mass hypothesis
+        """
+        log.info("constructing the brt channel")
+        ## trained BRT mass-range
+
+        min_brt = 60; max_brt = 200 
+        if isinstance(bins, int):
+            if limits is not None:
+                low, high = limits
+                binning = Hist(bins, low, high, type='D')
+            else:
+                binning = Hist(bins, min_brt, max_brt, type='D')
+        else: # iterable
+            if bins[0] > min_brt:
+                log.warning("min brt is less than first edge "
+                            "(will be underflow)")
+                if bins[-1] <= max_brt:
+                    log.warning("max brt is greater than or equal to last edge "
+                            "(will be overflow)")
+            binning = Hist(bins, type='D')
+
+        bkg_samples = []
+        for s, scores in bkg_brts:
+            hist_template = binning.Clone(
+                title=s.label,
+                **s.hist_decor)
+            sample = s.get_histfactory_sample(
+                hist_template, clf,
+                category, region,
+                cuts=cuts, scores=scores,
+                systematics=systematics,
+                uniform=uniform,
+                mva=mva)
+            bkg_samples.append(sample)
+
 
     def clf_channels(self, clf,
                      category, region,

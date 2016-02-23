@@ -29,7 +29,6 @@ from . import variables, CACHE_DIR, BDT_DIR
 from .systematics import systematic_name
 from .grid_search import BoostGridSearchCV
 
-
 def print_feature_ranking(clf, fields):
     importances = clf.feature_importances_
     indices = np.argsort(importances)[::-1]
@@ -52,7 +51,6 @@ def print_feature_ranking(clf, fields):
     print >> out
     print >> out, table.get_string(hrules=1)
     log.info(out.getvalue())
-
 
 def histogram_scores(hist_template, scores,
                      min_score=None, max_score=None,

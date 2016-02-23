@@ -1,3 +1,5 @@
+"""The base class for preparing analysis samples; 
+"""
 # std lib imports
 import os
 import sys
@@ -32,6 +34,7 @@ from .. import variables
 from .. import NTUPLE_PATH, DEFAULT_STUDENT, ETC_DIR, CACHE_DIR
 from ..utils import print_hist, ravel_hist, uniform_hist
 from ..classify import histogram_scores, Classifier
+from mva.regressor import brt_features
 from ..regions import REGIONS
 from ..systematics import (
     get_systematics, SYSTEMATICS_BY_WEIGHT,
@@ -54,8 +57,19 @@ class Dataset(namedtuple('Dataset',
 
 
 def get_workspace_np_name(sample, syst, year):
-    """
-    HSG4 naming convention for NPs in the workspaces
+    """HSG4 naming convention for NPs in the workspaces.
+    
+    Parameters
+    ----------
+    sample: Sample object;
+    syst: string ; systematics category
+    year: int; the year that data is taken.
+
+    Returns
+    -------
+    npname: string; Higgs studies Nuisance Parameters name
+    for workspaces.
+    
     """
     # https://twiki.cern.ch/twiki/bin/viewauth/AtlasProtected/HiggsPropertiesNuisanceParameterNames
     npname = 'ATLAS_{0}_{1:d}'.format(syst, year)
@@ -99,8 +113,38 @@ def get_workspace_np_name(sample, syst, year):
     npname = npname.replace('JER_{0}'.format(year), 'JER')
     return npname
 
-
 class Sample(object):
+
+    """
+    base class for preparing analysis samples.
+
+    Parameters
+    ----------
+    year: int, the year daa is taken.
+    
+    scale: float (default=1.), to scale the sample. 
+    
+    cuts: TCut object; to apply cuts at preparing samples level.
+    
+    ntuple_path: string; the path to ntuples
+    
+    student: string; default naming scheme for ntuples.
+    
+    force_open: bool; whether to force-open ntuples in case needed.
+    
+    trigger: bool; should you need to apply trigger
+    
+    channel: string; specific channel investigating.
+    
+    name: string; sample's name
+
+    label: string; sample's lable (used for plotting, etc.) 
+    
+
+    Attributes
+    ----------
+    
+    """
 
     def weight_fields(self):
         return []
@@ -144,6 +188,14 @@ class Sample(object):
         self.channel = channel
 
     def decorate(self, name=None, label=None, **hist_decor):
+        """update Sample object to decorate hists.
+        Parameter
+        ---------
+        name: string; sample's name
+        label: string; sample's lable.
+        hist_decor: dict; more lables for drawing histograms.
+        
+        """
         if name is not None:
             self.name = name
         if label is not None:
@@ -153,16 +205,22 @@ class Sample(object):
         return self
 
     def get_field_hist(self, vars, category, templates=None):
-        """
-        retrieve a dictionnary of histograms for the requested
+
+        """retrieve a dictionnary of histograms for the requested
         variables in the given category
-        ------
-        Parameters:
+        Parameters
+        ----------
         - vars: dictionnary of variables (see variables.py)
         - category: Analysis category see categories/*
         - template: dictionnary of Histograms. If specified used those
         histograms as templates to retrieve the various fields. If not
         specified, take the default binning specified in variables.py
+        
+        Returns
+        -------
+        field_hist: a dictionary of Histograms of the specifid varibales.
+
+        field_scale: an scaled dictionary of the Histograms of the specifid varibales.
         """
 
         field_hist = {}
@@ -215,7 +273,50 @@ class Sample(object):
                        weight_hist=None,
                        weighted=True,
                        bootstrap_data=False):
+        """
+        
+        Parameters
+        ----------
+        field_hist_template: a dictionary of Histogram templates for different variables.
+        
+        category: Category object; specific category oof analysis.
 
+        region: Region object; for dealing with signal or control region.
+        
+        cuts: TCut objetc; to apply cuts for plotting.
+
+        clf: trained classifier for separating sig-bkg;
+        
+        scores: np array; classifier'e predicted scores.
+        
+        min_score: float; min scores
+
+        max_score: float; max scores
+
+        systematics: bool; wethere to do systematics or not.
+
+        systematic_components: specific systematics to be applied.
+
+        suffix: string; a lable used for saving plots.
+
+        field_scale: scaled variable(normalized hists).
+
+        weighted_hist: weighted hist.
+
+        weighted: bool(default True); 
+
+        bootstrap_data: bool; wethere to random sample data with replacement or not for testing purposes
+
+        Returns
+        -------
+        field_hist: a dictionary of the field histograms.
+        
+        rec: mereged-record; table of all fields.
+
+        weights: weights array.
+
+        """
+        
         do_systematics = (isinstance(self, SystematicsSample)
                           and self.systematics
                           and systematics)
@@ -248,6 +349,7 @@ class Sample(object):
                              max_score=max_score,
                              inplace=True)
             return field_hist
+        
         rec, weights = self.draw_array(
             field_hist, category, region,
             cuts=cuts,
@@ -288,6 +390,49 @@ class Sample(object):
                                      ravel=True,
                                      uniform=False,
                                      mva=False):
+        """      
+        Parameters
+        ----------
+        field_hist_template: a dictionary of Histogram templates for different variables.
+        
+        category: Category object; specific category oof analysis.
+        
+        region: Region object; for dealing with signal or control region.
+        
+        cuts: TCut objetc; to apply some additional cuts.
+
+        clf: trained classifier for separating sig-bkg;
+        
+        scores: np array; classifier'e predicted scores.
+        
+        min_score: float; min scores
+
+        max_score: float; max scores
+
+        systematics: bool; wethere to do systematics or not.
+
+        systematic_components: specific systematics to be applied.
+
+        suffix: string; a lable used for saving plots.
+
+        field_scale: scaled variable(normalized hists).
+
+        weighted_hist: weighted hist.
+
+        weighted: bool(default True); 
+
+        bootstrap_data: bool; wethere to random sample data with replacement or not for testing purposes
+        
+        no_signal_fixes: 
+        
+        ravel: bool(default=True); convert 2D hists to 1D hists, also handles systematics if present.
+        
+        uniform: bool(default=False); wethere to apply uniform bins for hists 
+
+        mva: bool(default=True); to be passed to the histfactory.
+        
+        """
+
 
         from .data import Data
         from .qcd import QCD
@@ -442,9 +587,33 @@ class Sample(object):
               key=None,
               num_partitions=2,
               return_idx=False):
-        """
-        Partition sample into num_partitions chunks of roughly equal size
+        """Partition sample into num_partitions chunks of roughly equal size
         assuming no correlation between record index and field values.
+        
+        Parameters
+        ----------
+        category: Category object; holding specific category cuts, labels, etc.
+
+        region: Region object; signal or control region
+        
+        fields: variables dictionary 
+        
+        cuts: TCut objetc; cuts to be applied for partitioning sample.
+
+        include_weight: bool(default=True); wether to incude weights or not.
+
+        systematics: string(default='NOMINAL'); systematics type
+
+        key: split by field values modulo the number of partitions
+
+        num_partitions: int(default=2); the number of partitions requested.
+
+        return_index: bool(default=False); wethere to return index.
+
+        Returns
+        -------
+        a list of np arrays (splited sample)
+
         """
         partitions = []
         for start in range(num_partitions):
@@ -489,9 +658,44 @@ class Sample(object):
                        cuts=None,
                        clf=None,
                        clf_name='classifier',
+                       brt=None,
+                       brt_name='brt',
                        scores=None,
                        include_weight=True,
                        systematic='NOMINAL'):
+        """ To merge two records (samples).
+
+        Parameters
+        ----------
+        category: Category object; holding specific category cuts, labels, etc.
+
+        region: Region object; signal or control region
+        
+        fields: variables dictionary 
+        
+        cuts: TCut objetc; cuts to be applied for partitioning sample.
+
+        clf: Classifier object; trained to separate sig and bkg
+
+        clf_name: string; clf's name.
+
+        brt: Regressor; Trained regression Tree for predicting di-tau mass.
+
+        brt_name: string; brt's name
+        
+        scores: classifier's predicted score.
+
+        include_weights: bool(default=True); should include weights.
+
+        systematics: string; systematics type.
+
+
+        Returns
+        -------
+        rec: merged record (np recarray); 
+                
+        """
+        
         recs = self.records(
             category=category,
             region=region,
@@ -515,15 +719,38 @@ class Sample(object):
                 # ignore weights
                 scores = scores[0]
             rec = recfunctions.rec_append_fields(rec,
-                names=clf_name,
-                data=scores,
-                dtypes='f4')
+                                                 names=clf_name,
+                                                 data=scores,
+                                                 dtypes='f4')
+        
+        if brt is not None:
+            arr = rec2array(rec, fields=brt_features)
+            brt_mass = brt.predict(arr)
+            rec = recfunctions.rec_append_fields(rec,
+                                                 names= brt_name,
+                                                 data = brt_mass,
+                                                 dtypes = 'f4'
+                                                 )                                         
         return rec
 
     def array(self, *args, **kwargs):
         return rec2array(self.merged_records(*args, **kwargs))
 
     def weights(self, systematic='NOMINAL'):
+
+        """ to weight the fields.
+
+        Parameters
+        ----------
+
+        systematics: string; systematics type.
+
+        Returns
+        -------
+        weight_fields: weighted fields.
+
+        """
+
         weight_fields = self.weight_fields()
         if isinstance(self, SystematicsSample):
             systerm, variation = \
@@ -547,7 +774,28 @@ class Sample(object):
         
         return weight_fields
 
-    def cuts(self, category=None, region=None, systematic='NOMINAL', **kwargs):
+    def cuts(self,
+             category=None,
+             region=None,
+             systematic='NOMINAL',
+             **kwargs):
+        """ to apply some cuts on the sample.
+        
+        Parameters
+        ----------
+        category: Category object;
+
+        region: Region object.
+
+        systematic: str; systematics type.
+        
+      
+        Returns
+        -------
+        cuts: TCut object
+        
+        """
+
         cuts = Cut(self._cuts)
         if category is not None:
             cuts &= category.get_cuts(self.year, **kwargs)
@@ -580,22 +828,71 @@ class Sample(object):
                           weight_hist=None,
                           field_weight_hist=None,
                           clf=None,
+                          regressor=None,
                           scores=None,
                           min_score=None,
                           max_score=None,
                           systematic='NOMINAL',
                           scale=1.,
                           bootstrap_data=False):
+
+        """ helper function for drawing a variable hist(array type).      
+
+        Parameters
+        ----------
+        field_hist: a dictionary of Histogram for different variables.
+        
+        category: Category object; specific category of analysis.
+        
+        region: Region object; for dealing with signal or control region.
+        
+        cuts: TCut objetc; to apply cuts for plotting.
+
+        weighted: bool(default=True); 
+
+        clf: trained classifier for separating sig-bkg;
+
+        scores: np array; classifier'e predicted scores.
+        
+        min_score: float; min scores
+
+        max_score: float; max scores
+
+        regressor: trained Regression Tree for di-tau mass estimation.
+        
+        weighted_hist: weighted hist.
+
+        systematics: str; systematics type..
+
+        scale: float(default=1.); normalize hists.
+
+        bootstrap_data: bool; wethere to random sample data with replacement or not for testing purposes
+
+        
+        Returns
+        -------
+        rec: record array.
+        
+        weights: array of weights for vars.
+
+        """
+
         from .data import Data, DataInfo
         all_fields = []
         classifiers = []
+        regressors = []
         for f in field_hist.iterkeys():
             if isinstance(f, basestring):
                 all_fields.append(f)
             elif isinstance(f, Classifier):
                 classifiers.append(f)
+            
+            elif isinstance(f, Regressor):
+                regressors.append(f)
+                
             elif f is not None:
                 all_fields.extend(list(f))
+
         # hack
         if isinstance(self, Signal) and len(self.modes) == 1 and self.modes[0] == 'gg':
             # for ggH3in systematic
@@ -607,6 +904,15 @@ class Sample(object):
             classifier = classifiers[0]
         else:
             classifier = None
+        
+        if len(regressors) > 1:
+            raise RuntimeError(
+                "more than one regressor in fields is not supported")
+        elif len(regressors) == 1:
+            regressor = regressors[0]
+        else:
+            regressor = None
+
         if isinstance(self, Data) and bootstrap_data:
             log.info("using bootstrapped data")
             analysis = bootstrap_data
@@ -614,18 +920,22 @@ class Sample(object):
             scores = []
             for s in analysis.backgrounds:
                 rec = s.merged_records(category, region,
-                    fields=all_fields, cuts=cuts,
-                    include_weight=True,
-                    clf=clf,
-                    systematic=systematic)
+                                       fields=all_fields,
+                                       cuts=cuts,
+                                       include_weight=True,
+                                       clf=clf,
+                                       regressor=regressor,
+                                       systematic=systematic)
                 recs.append(rec)
-            b_rec = stack(recs, fields=all_fields + ['classifier', 'weight'])
+            b_rec = stack(recs, fields=all_fields + ['classifier', 'weight'] + ['regressor', 'weight'])
             s_rec = analysis.higgs_125.merged_records(category, region,
-                fields=all_fields, cuts=cuts,
-                include_weight=True,
-                clf=clf,
-                systematic=systematic)
-
+                                                      fields=all_fields,
+                                                      cuts=cuts,
+                                                      include_weight=True,
+                                                      clf=clf,
+                                                      regressor=regressor,
+                                                      systematic=systematic)
+            
             # handle negative weights separately
             b_neg = b_rec[b_rec['weight'] < 0]
             b_pos = b_rec[b_rec['weight'] >= 0]
@@ -644,19 +954,20 @@ class Sample(object):
                 bootstrap(b_neg),
                 bootstrap(b_pos),
                 bootstrap(s_rec)],
-                fields=all_fields + ['classifier', 'weight'])
+                fields=all_fields + ['classifier', 'weight', 'regressor'])
 
             rec['weight'][:] = 1.
             scores = rec['classifier']
         elif all_fields or scores is None:
             # TODO: only get unblinded vars
             rec = self.merged_records(category, region,
-                fields=all_fields, cuts=cuts,
-                include_weight=True,
-                clf=classifier,
-                #scores=scores,
-                scores=scores[0] if isinstance(scores, tuple) else scores,
-                systematic=systematic)
+                                      fields=all_fields, cuts=cuts,
+                                      include_weight=True,
+                                      clf=classifier,
+                                      #scores=scores,
+                                      scores=scores[0] if isinstance(scores, tuple) else scores,
+                                      regressor=regressor,
+                                      systematic=systematic)
             if scores is None and 'classifier' in rec.dtype.names:
                 scores = rec['classifier']
         else:
@@ -725,6 +1036,10 @@ class Sample(object):
         for fields, hist in field_hist.items():
             if isinstance(fields, Classifier) or fields is None:
                 fields = ['classifier']
+
+            if isinstance(fields, Regressor) or fields is None:
+                fields = ['regressor']
+
             # fields can be a single field or list of fields
             elif not isinstance(fields, (list, tuple)):
                 fields = [fields]
@@ -788,12 +1103,18 @@ class Sample(object):
         weighted :
             if True, return the weighted number of events
         hist :
-            if specified, fill his histogram. if not create a new one an
-            return it.
+            if specified, fill this histogram. if not create a new one an
+            return it.s
         scale :
             if specified, multiply the number of events by the given
             scale.
-        """
+       
+        Returns
+        -------
+
+        hist: TH1F; one-bin histogram with number of event as content.
+            
+        """ 
         if hist is None:
             hist = Hist(1, -100, 100)
         rec = self.merged_records(category=category, region=region,
@@ -806,9 +1127,13 @@ class Sample(object):
             fill_hist(hist, np.ones(len(rec)))
         return hist
 
-    def events_root(self, category=None, region=None, cuts=None, hist=None,
-                    weighted=True, scale=1.):
-        """
+    def events_root(self, category=None,
+                    region=None,
+                    cuts=None,
+                    hist=None,
+                    weighted=True,
+                    scale=1.):
+        """ see self.events. 
         QUICK FIX.
         DO NOT USE UNLESS YOU KNOW WHAT YOU'RE DOING
         """
@@ -843,125 +1168,33 @@ class Background(object):
 
 
 class SystematicsSample(Sample):
+    """ base class for providing methods specific to the systematics sample
+        which inherits from Sample class.
 
-    @classmethod
-    def get_sys_term_variation(cls, systematic):
-        if systematic == 'NOMINAL':
-            systerm = None
-            variation = 'NOMINAL'
-        elif len(systematic) > 1:
-            # no support for this yet...
-            systerm = None
-            variation = 'NOMINAL'
-        else:
-            systerm, variation = systematic[0].rsplit('_', 1)
-        return systerm, variation
+    Parameters
+    ----------
+    year: int; year data is taken.
 
-    def systematics_components(self):
-        common = [
-            'MET_RESOSOFTTERMS',
-            'MET_SCALESOFTTERMS',
-            'TAU_ID',
-            'TRIGGER',
-        ]
-        if self.channel == 'lephad':
-            log.warning('Incomplete list of SF !')
-            return ['LEP_ID']
-        
-        else:
-            # No FAKERATE for embedding since fakes are data
-            # so don't include FAKERATE here
-            if self.year == 2011:
-                return common + [
-                    'TES_TRUE_FINAL',
-                    'TES_FAKE_FINAL',
-                    ]
-            elif self.year == 2012:
-                return common + [
-                    'TAU_ID_STAT',
-                    'TES_TRUE_INSITUINTERPOL',
-                    'TES_TRUE_SINGLEPARTICLEINTERPOL',
-                    'TES_TRUE_MODELING',
-                    'TES_FAKE_TOTAL',
-                    'TRIGGER_STAT_PERIODA',
-                    'TRIGGER_STAT_PERIODBD_BARREL',
-                    'TRIGGER_STAT_PERIODBD_ENDCAP',
-                    'TRIGGER_STAT_PERIODEM_BARREL',
-                    'TRIGGER_STAT_PERIODEM_ENDCAP',
-                    ]
-            else:
-                log.warning('Incomplete list of SF !')
-                return ['TAU_ID'] 
+    db: Database object; for more see hhdb/datasets.py 
+    
+    systematics: bool(default=False); Wethere to do the systematics.
 
+    tau_id_sf: bool(default=True); should include tau ID scale factor?
 
-    def weight_systematics(self):
-        systematics = {}
-        if self.tau_id_sf:
-            if self.channel == 'hadhad':
-                if self.year == 2011:
-                    tauid = {
-                        'TAU_ID': {
-                            'UP': [
-                                'tau1_id_sf_high',
-                                'tau2_id_sf_high'],
-                            'DOWN': [
-                                'tau1_id_sf_low',
-                                'tau2_id_sf_low'],
-                            'NOMINAL': [
-                                'tau1_id_sf',
-                                'tau2_id_sf']}
-                        }
-                elif self.year == 2012:
-                    tauid = {
-                        'TAU_ID': {
-                            'STAT_UP': [
-                                'tau1_id_sf_stat_high',
-                                'tau2_id_sf_stat_high'],
-                            'STAT_DOWN': [
-                                'tau1_id_sf_stat_low',
-                                'tau2_id_sf_stat_low'],
-                            'UP': [
-                                'tau1_id_sf_sys_high',
-                                'tau2_id_sf_sys_high'],
-                            'DOWN': [
-                                'tau1_id_sf_sys_low',
-                                'tau2_id_sf_sys_low'],
-                            'NOMINAL': [
-                                'tau1_id_sf',
-                                'tau2_id_sf']},
-                        }
-                else:
-                    tauid = {
-                        'TAU_ID': {
-                            'STAT_UP': [],
-                            'STAT_DOWN': [],
-                            'UP': [],
-                            'DOWN': [],
-                            'NOMINAL': [
-                                'ditau_tau0_jet_id_medium_sf',
-                                'ditau_tau1_jet_id_medium_sf']},
-                        }
-            elif self.channel == 'lephad':
-                if self.year == 2011:
-                    log.error('lephad is not implemented for 2011')
-                    raise RuntimeError
-                elif self.year == 2012:
-                    log.error('lephad is not implemented for 2012')
-                    raise RuntimeError
-                else:
-                    tauid = {
-                        'TAU_ID': {
-                            'NOMINAL': ['tau_0_jet_id_medium_sf'],},
-                        }
-            systematics.update(tauid)
+    lep_id_sf: bool(default=True); should include lepton (electron, muon) ID scale factor?
 
-        return systematics
+    channel: str(default='hadhad'); analysis channel.
 
-    def cut_systematics(self):
-        return {}
+    Attributes
+    ----------
+    """
 
-    def __init__(self, year, db=DB, systematics=False,
-                 tau_id_sf=True, lep_id_sf=True, channel='hadhad', **kwargs):
+    def __init__(self, year,
+                 db=DB,
+                 systematics=False,
+                 tau_id_sf=True,
+                 lep_id_sf=True,
+                 channel='hadhad', **kwargs):
 
         if isinstance(self, Background):
             sample_key = self.__class__.__name__.lower()
@@ -995,7 +1228,6 @@ class SystematicsSample(Sample):
         h5file = get_file(self.ntuple_path, self.student, hdf=True, force_reopen=self.force_reopen)
 
         from .ztautau import Embedded_Ztautau
-
         for i, name in enumerate(self.samples):
 
             log.debug(name)
@@ -1074,16 +1306,161 @@ class SystematicsSample(Sample):
                               xs=xs, kfact=kfact, effic=effic)
             self.datasets.append(dataset)
 
+
+    @classmethod
+    def get_sys_term_variation(cls, systematic):
+        """ to get the systematic terms and syst variations.
+
+        Parameters
+        ----------
+        cls: class refrence.
+
+        systematics: str; syst type.
+
+        Returns:
+        systerm: systematic terms
+
+        variation: systematic terms varation.
+
+        """
+        
+        if systematic == 'NOMINAL':
+            systerm = None
+            variation = 'NOMINAL'
+        elif len(systematic) > 1:
+            # no support for this yet...
+            systerm = None
+            variation = 'NOMINAL'
+        else:
+            systerm, variation = systematic[0].rsplit('_', 1)
+        return systerm, variation
+
+    def systematics_components(self):
+
+        """ add specific systematic components for the analysis.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        common+ : a list of systematics components to be included in the analysis.
+
+        """
+        common = [
+            'MET_RESOSOFTTERMS',
+            'MET_SCALESOFTTERMS',
+            'TAU_ID',
+            'TRIGGER',
+        ]
+        if self.channel == 'lephad':
+            log.warning('Incomplete list of SF !')
+            return ['LEP_ID']
+        
+        else:
+            # No FAKERATE for embedding since fakes are data
+            # so don't include FAKERATE here
+            if self.year == 2011:
+                return common + [
+                    'TES_TRUE_FINAL',
+                    'TES_FAKE_FINAL',
+                    ]
+            elif self.year == 2012:
+                return common + [
+                    'TAU_ID_STAT',
+                    'TES_TRUE_INSITUINTERPOL',
+                    'TES_TRUE_SINGLEPARTICLEINTERPOL',
+                    'TES_TRUE_MODELING',
+                    'TES_FAKE_TOTAL',
+                    'TRIGGER_STAT_PERIODA',
+                    'TRIGGER_STAT_PERIODBD_BARREL',
+                    'TRIGGER_STAT_PERIODBD_ENDCAP',
+                    'TRIGGER_STAT_PERIODEM_BARREL',
+                    'TRIGGER_STAT_PERIODEM_ENDCAP',
+                    ]
+            else:
+                log.warning('Incomplete list of SF !')
+                return ['TAU_ID'] 
+
+    def weight_systematics(self):
+        systematics = {}
+        if self.tau_id_sf:
+            if self.channel == 'hadhad':
+                if self.year == 2011:
+                    tauid = {
+                        'TAU_ID': {
+                            'UP': [
+                                'tau1_id_sf_high',
+                                'tau2_id_sf_high'],
+                            'DOWN': [
+                                'tau1_id_sf_low',
+                                'tau2_id_sf_low'],
+                            'NOMINAL': [
+                                'tau1_id_sf',
+                                'tau2_id_sf']}
+                        }
+                elif self.year == 2012:
+                    tauid = {
+                        'TAU_ID': {
+                            'STAT_UP': [
+                                'tau1_id_sf_stat_high',
+                                'tau2_id_sf_stat_high'],
+                            'STAT_DOWN': [
+                                'tau1_id_sf_stat_low',
+                                'tau2_id_sf_stat_low'],
+                            'UP': [
+                                'tau1_id_sf_sys_high',
+                                'tau2_id_sf_sys_high'],
+                            'DOWN': [
+                                'tau1_id_sf_sys_low',
+                                'tau2_id_sf_sys_low'],
+                            'NOMINAL': [
+                                'tau1_id_sf',
+                                'tau2_id_sf']},
+                        }
+                else:
+                    tauid = {
+                        'TAU_ID': {
+                            'STAT_UP': [],
+                            'STAT_DOWN': [],
+                            'UP': [],
+                            'DOWN': [],
+                            'NOMINAL': [
+                                'ditau_tau0_jet_id_medium_sf',
+                                'ditau_tau1_jet_id_medium_sf']},
+                        }
+            elif self.channel == 'lephad':
+                if self.year == 2011:
+                    log.error('lephad is not implemented for 2011')
+                    raise RuntimeError
+                elif self.year == 2012:
+                    log.error('lephad is not implemented for 2012')
+                    raise RuntimeError
+                else:
+                    tauid = {
+                        'TAU_ID': {
+                            'NOMINAL': ['tau_0_jet_id_medium_sf'],},
+                        }
+            systematics.update(tauid)
+
+        return systematics
+
+    def cut_systematics(self):
+        return {}
+
     def draw(self, field, hist, category=None, region=None, **kwargs):
+        """ see self.draw_array.
+
+        """
         field_scale = {field: get_scale(field)}
         return self.draw_array({field: hist},
                                category=category,
                                region=region,
                                field_scale=field_scale,
                                **kwargs)
-
     def draw_array(self, field_hist,
-                   category=None, region=None,
+                   category=None,
+                   region=None,
                    cuts=None,
                    weighted=True,
                    field_scale=None,
@@ -1093,10 +1470,49 @@ class SystematicsSample(Sample):
                    scores=None,
                    min_score=None,
                    max_score=None,
+                   regressor=None,
                    systematics=False,
                    systematics_components=None,
                    scale=1.,
                    bootstrap_data=False):
+
+
+        """
+        Parameters
+        ----------
+        field_hist: field histogram a dictionary {field:hist}.
+        
+        category: Category object; specific category oof analysis.
+
+        region: Region object; for dealing with signal or control region.
+        
+        cuts: TCut objetc; to apply cuts for plotting.
+
+        clf: trained classifier for separating sig-bkg;
+        
+        scores: np array; classifier's predicted scores.
+        
+        min_score: float; min scores
+
+        max_score: float; max scores
+
+        systematics: bool; wethere to do systematics or not.
+
+        systematics_components: specific systematics to be applied.
+
+        field_scale: scaled variable(normalized hists).
+
+        weighted_hist: weighted hist.
+
+        weighted: bool(default True); 
+
+        bootstrap_data: bool; wethere to random sample data with replacement or not (for testing purposes)
+
+        Returns
+        -------
+        field_hist: a dictionary of the filled field histogram.
+
+        """
 
         do_systematics = self.systematics and systematics
         if scores is None and clf is not None:
@@ -1105,7 +1521,8 @@ class SystematicsSample(Sample):
                 systematics=systematics,
                 systematics_components=systematics_components)
 
-        rec, weights = self.draw_array_helper(field_hist, category, region,
+        rec, weights = self.draw_array_helper(
+            field_hist, category, region,
             cuts=cuts,
             weighted=weighted,
             field_scale=field_scale,
@@ -1114,6 +1531,7 @@ class SystematicsSample(Sample):
             scores=scores['NOMINAL'] if scores else None,
             min_score=min_score,
             max_score=max_score,
+            regressor=rgressor,
             systematic='NOMINAL',
             scale=scale)
 
@@ -1143,24 +1561,51 @@ class SystematicsSample(Sample):
                 sys_field_hist[field] = sys_hist
 
             self.draw_array_helper(sys_field_hist, category, region,
-                cuts=cuts,
-                weighted=weighted,
-                field_scale=field_scale,
-                weight_hist=weight_hist,
-                field_weight_hist=field_weight_hist,
-                scores=scores[systematic] if scores else None,
-                min_score=min_score,
-                max_score=max_score,
-                systematic=systematic,
-                scale=scale)
+                                   cuts=cuts,
+                                   weighted=weighted,
+                                   field_scale=field_scale,
+                                   weight_hist=weight_hist,
+                                   field_weight_hist=field_weight_hist,
+                                   scores=scores[systematic] if scores else None,
+                                   min_score=min_score,
+                                   max_score=max_score,
+                                   regressor=regressor,
+                                   systematic=systematic,
+                                   scale=scale)
 
-        return rec, weights
+    return rec, weights
 
     def scores(self, clf, category, region,
                cuts=None, scores_dict=None,
                systematics=False,
                systematics_components=None,
                scale=1.):
+
+        """ to get the predicted scores of a trained classifier.
+
+        Parameters
+        ----------
+
+        clf: Classifier objetc; for more see ../classify.Classifier.
+
+        category: Category type object; 
+
+        region: Region type object;
+
+        cuts: TCut object; use  as defined in ../categories/ or add more here.
+
+        systematics: bool(default=False); should do systematics?
+        
+        systematics_components: list; what syst components should be included ?
+
+        scale: float(default=1.);
+        
+        Returns
+        -------
+        scores_dict: dictionary of scores (syst components as keys)
+
+        """
+
 
         # TODO check that weight systematics are included
         do_systematics = self.systematics and systematics
@@ -1196,6 +1641,31 @@ class SystematicsSample(Sample):
                 scale=1.,
                 return_idx=False,
                 **kwargs):
+        
+        """ to create recrrays.
+        Parameters
+        ----------
+        category: Category type object; 
+
+        region: Region type object;
+        
+        fields: list; list of branches (vars) to read.
+        
+        cuts: TCut object; use  as defined in ../categories/ or add more here.
+
+        systematics: str; systs type.
+
+        include_weights: bool(default=True); to include weights.
+
+        scale: float(default=1.);
+
+        return_idx: bool(default=False); should retrun index? 
+        
+        Returns
+        -------
+        recs: a list of rec (np.recarray)
+        
+        """
 
         from .ztautau import Ztautau
         if include_weight and fields is not None:
@@ -1305,11 +1775,23 @@ class SystematicsSample(Sample):
 
 class MC(SystematicsSample):
 
+    """ a dedicated Monte Carlo sample class.
+
+    Parameters
+    ----------
+
+    Attributes
+    ----------
+    """
+
     def __init__(self, *args, **kwargs):
         self.pileup_weight = kwargs.pop('pileup_weight', True)
         super(MC, self).__init__(*args, **kwargs)
 
     def systematics_components(self):
+        """
+        see SystematicsSample.systematics_components 
+        """
         components = super(MC, self).systematics_components()
         components = components + [
             'JES_Modelling',
@@ -1330,6 +1812,9 @@ class MC(SystematicsSample):
         return components
 
     def weight_fields(self):
+        """ see SystematicsSample.weight_fields
+        """
+        
         return super(MC, self).weight_fields() + [
             'weight_mc',
             # uncertainty on these are small and are ignored:
@@ -1338,6 +1823,8 @@ class MC(SystematicsSample):
         ]
 
     def weight_systematics(self):
+        """ see SystematicsSample.weight_systematics
+        """
         systematics = super(MC, self).weight_systematics()
         if self.channel == 'hadhad' and self.year != 2015:
             systematics.update({
@@ -1433,8 +1920,20 @@ class CompositeSample(object):
     and also return the summed histograms of all of those samples
     for the requested fields
     TODO: Implement a naming from the components.
+    
+    Parameters
+    ----------
+    
+    samples_list: a list of Sample objects;
+    
+    name: str; name for the combined samples
+    
+    label: str; label for the combined samples
+
     """
-    def __init__(self, samples_list, name='Sample', label='Sample'):
+    def __init__(self, samples_list,
+                 name='Sample',
+                 label='Sample'):
         if not isinstance( samples_list, (list,tuple)):
             samples_list = [samples_list]
         if not isinstance (samples_list[0], Sample):
@@ -1457,7 +1956,7 @@ class CompositeSample(object):
         """
         Construct histograms of the sum of all the samples.
         Parameters:
-        - field_hist_tot: dictionnary of Histograms that constain the structure we want to retrieve
+        - field_hist_tot: dictionnary of Histograms that constrain the structure we want to retrieve
         - category: the analysis category
         - region: the analysis region (for example 'OS')
         - systematics: boolean flag

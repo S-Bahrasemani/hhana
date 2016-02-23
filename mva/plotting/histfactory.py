@@ -113,7 +113,8 @@ def draw_channel_array(
     if not vars:
         raise RuntimeError("no variables selected")
 
-    field_channel = analysis.get_channel_array(vars,
+    field_channel = analysis.get_channel_array(
+        vars,
         category, region, cuts,
         include_signal=include_signal,
         mass=mass,

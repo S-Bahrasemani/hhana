@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+""" Plot BRT mass 
+This script is to plot the BRT mass and save it to disk.
+"""
+
+from mva.cmd import get_parser
+args = get_parser(actions=False).parse_args()
+args.embedding = False
+
+# local imports
+from mva.plotting import draw_channel_array
+from mva.systematics import get_systematics, parse_systematics
+from mva.analysis import get_analysis
+from mva.variables import VARIABLES
+from mva.plotting import draw_ratio, draw
+from mva import log;
+from mva.regressor import get_regressor, draw_brt
+
+SYSTEMATICS = get_systematics(args.year)
+args.systematics_components = parse_systematics(args.systematics_components)
+# categories = CATEGORIES[args.categories]
+category_names = args.category_names
+target_region = args.target_region
+
+cat_defs = [args.categories]
+if args.categories != 'presel':
+    cat_defs.append(args.controls)
+
+regressor = get_regressor(12032015, meta_name='GradientBoostingRegressor')
+analysis = get_analysis(args)
+
+draw_brt (analysis, regressor)
+
