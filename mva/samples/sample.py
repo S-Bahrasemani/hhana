@@ -9,7 +9,8 @@ from collections import namedtuple
 
 # numpy imports
 import numpy as np
-from numpy.lib import recfunctions
+#from numpy.lib import recfunctions
+from matplotlib.mlab import rec_append_fields
 
 # mpl imports
 from matplotlib import mlab
@@ -44,6 +45,11 @@ from .db import DB, TEMPFILE, get_file
 from ..cachedtable import CachedTable
 from ..variables import get_binning, get_scale
 from mva.categories import get_trigger
+
+try:
+    from moments import HCM
+except:
+    log.warning('moments module is not installed')
 
 BCH_UNCERT = pickle.load(open(os.path.join(CACHE_DIR, 'bch_cleaning.cache')))
 
@@ -249,6 +255,7 @@ class Sample(object):
                     bins, min, max = bins
                 else:
                     min, max = bins
+                log.debug("Arguments passed to Hist. bins {0}, min {1}, max {2}, title {3}, hist_decor {4}".format(bins, min, max, self.label, self.hist_decor))
                 hist = Hist(bins, min, max,
                     title=self.label,
                     type='D',
@@ -718,7 +725,7 @@ class Sample(object):
             elif isinstance(scores, tuple):
                 # ignore weights
                 scores = scores[0]
-            rec = recfunctions.rec_append_fields(rec,
+        rec = recfunctions.rec_append_fields(rec,
                                                  names=clf_name,
                                                  data=scores,
                                                  dtypes='f4')
@@ -771,7 +778,7 @@ class Sample(object):
             weight_fields.remove('tau1_trigger_sf')
             weight_fields.remove('tau2_trigger_sf')
             weight_fields.extend(['tau1_trigger_eff', 'tau2_trigger_eff'])
-        
+
         return weight_fields
 
     def cuts(self,
@@ -803,7 +810,7 @@ class Sample(object):
             cuts &= REGIONS[region]
         if self.trigger:
             trig_cut = get_trigger(self.channel)
-            cuts &= trig_cut
+            #cuts &= trig_cut
             log.info('Trigger: {0}'.format(trig_cut))
         # from .data import Data
         # if isinstance(self, Data):
@@ -1072,10 +1079,10 @@ class Sample(object):
                     hist.datainfo = DataInfo(self.info.lumi, self.info.energies)
 
         if scores is not None and 'classifier' not in rec.dtype.names:
-            rec = recfunctions.rec_append_fields(rec,
+            rec = rec_append_fields(rec,
                 names='classifier',
-                data=scores,
-                dtypes='f4')
+                arrs=scores,
+                dtypes=np.dtype('f4'))
         return rec, weights
 
     def events(self, category=None, region=None,
@@ -1151,7 +1158,7 @@ class Sample(object):
                 weight_branches = self.weights()
                 selection *= Cut(str(weight * scale))
                 selection *= Cut('*'.join(weight_branches))
-            log.debug("requesing number of events from %s using cuts: %s"
+            log.debug("requesting number of events from %s using cuts: %s"
                 % (tree.GetName(), selection))
             tree.Draw('1', selection, hist=hist)
         return hist
@@ -1174,20 +1181,111 @@ class SystematicsSample(Sample):
     Parameters
     ----------
     year: int; year data is taken.
-
     db: Database object; for more see hhdb/datasets.py 
     
     systematics: bool(default=False); Wethere to do the systematics.
-
-    tau_id_sf: bool(default=True); should include tau ID scale factor?
-
-    lep_id_sf: bool(default=True); should include lepton (electron, muon) ID scale factor?
-
-    channel: str(default='hadhad'); analysis channel.
-
     Attributes
     ----------
     """
+
+    def systematics_components(self):
+        common = [
+            'MET_RESOSOFTTERMS',
+            'MET_SCALESOFTTERMS',
+            'TAU_ID',
+            'TRIGGER',
+        ]
+        if self.channel == 'lephad':
+            log.warning('Incomplete list of SF !')
+            return ['LEP_ID']
+
+        else:
+            # No FAKERATE for embedding since fakes are data
+            # so don't include FAKERATE here
+            if self.year == 2011:
+                return common + [
+                    'TES_TRUE_FINAL',
+                    'TES_FAKE_FINAL',
+                    ]
+            elif self.year == 2012:
+                return common + [
+                    'TAU_ID_STAT',
+                    'TES_TRUE_INSITUINTERPOL',
+                    'TES_TRUE_SINGLEPARTICLEINTERPOL',
+                    'TES_TRUE_MODELING',
+                    'TES_FAKE_TOTAL',
+                    'TRIGGER_STAT_PERIODA',
+                    'TRIGGER_STAT_PERIODBD_BARREL',
+                    'TRIGGER_STAT_PERIODBD_ENDCAP',
+                    'TRIGGER_STAT_PERIODEM_BARREL',
+                    'TRIGGER_STAT_PERIODEM_ENDCAP',
+                    ]
+            else:
+                log.warning('Incomplete list of SF !')
+                return ['TAU_ID']
+            
+    def weight_systematics(self):
+        systematics = {}
+        if self.tau_id_sf:
+            if self.channel == 'hadhad':
+                if self.year == 2011:
+                    tauid = {
+                        'TAU_ID': {
+                            'UP': [
+                                'tau1_id_sf_high',
+                                'tau2_id_sf_high'],
+                            'DOWN': [
+                                'tau1_id_sf_low',
+                                'tau2_id_sf_low'],
+                            'NOMINAL': [
+                                'tau1_id_sf',
+                                'tau2_id_sf']}
+                        }
+                elif self.year == 2012:
+                    tauid = {
+                        'TAU_ID': {
+                            'STAT_UP': [
+                                'tau1_id_sf_stat_high',
+                                'tau2_id_sf_stat_high'],
+                            'STAT_DOWN': [
+                                'tau1_id_sf_stat_low',
+                                'tau2_id_sf_stat_low'],
+                            'UP': [
+                                'tau1_id_sf_sys_high',
+                                'tau2_id_sf_sys_high'],
+                            'DOWN': [
+                                'tau1_id_sf_sys_low',
+                                'tau2_id_sf_sys_low'],
+                            'NOMINAL': [
+                                'tau1_id_sf',
+                                'tau2_id_sf']},
+                        }
+                else:
+                    tauid = {
+                        'TAU_ID': {
+                            'STAT_UP': [],
+                            'STAT_DOWN': [],
+                            'UP': [],
+                            'DOWN': [],
+                            'NOMINAL': []},
+                               # 'ditau_tau0_ele_bdt_medium_eff_sf',
+                               # 'ditau_tau1_ele_bdt_medium_eff_sf']},
+                        }
+            elif self.channel == 'lephad':
+                if self.year == 2011:
+                    log.error('lephad is not implemented for 2011')
+                    raise RuntimeError
+                elif self.year == 2012:
+                    log.error('lephad is not implemented for 2012')
+                    raise RuntimeError
+                else:
+                    tauid = {
+                        'TAU_ID': {
+                            'NOMINAL': ['tau_0_jet_id_medium_sf'],},
+                        }
+            systematics.update(tauid)
+    channel: str(default='hadhad'); analysis channel.
+
 
     def __init__(self, year,
                  db=DB,
@@ -1226,7 +1324,6 @@ class SystematicsSample(Sample):
         self.norms = {}
         rfile = get_file(self.ntuple_path, self.student, force_reopen=self.force_reopen)
         h5file = get_file(self.ntuple_path, self.student, hdf=True, force_reopen=self.force_reopen)
-
         from .ztautau import Embedded_Ztautau
         for i, name in enumerate(self.samples):
 
@@ -1246,12 +1343,12 @@ class SystematicsSample(Sample):
                     events_bin = 4
                 else:
                     events_bin = 2
-                    
+
             if year == 2015:
                 events_hist_suffix = '_daod'
             else:
                 events_hist_suffix = '_cutflow'
-                
+
 
             tables['NOMINAL'] =  CachedTable.hook(getattr(
                 h5file.root, treename))
@@ -1728,8 +1825,7 @@ class SystematicsSample(Sample):
             except Exception as e:
                 print table
                 print e
-                continue
-                #raise
+                raise
             if return_idx:
                 # only valid if table_selection is non-empty
                 idx = table.get_where_list(table_selection, **kwargs)
@@ -1748,23 +1844,24 @@ class SystematicsSample(Sample):
                     weights_el = reduce(np.multiply, [rec['lep_isele'], rec['lep_0_id_eff_sf_tight']])
                     weights_mu = reduce(np.multiply, [rec['lep_ismu'], rec['lep_0_id_eff_sf_loose']])
                     weights *= reduce(np.add, [weights_el, weights_mu])
-                    
+
                 # drop other weight fields
                 #rec = recfunctions.rec_drop_fields(rec, weight_branches)
                 # add the combined weight
-                rec = recfunctions.rec_append_fields(rec,
+                rec = rec_append_fields(rec,
                     names='weight',
-                    data=weights,
-                    dtypes='f8')
+                    arrs=weights,
+                    dtypes=np.dtype('f8'))
                 if rec['weight'].shape[0] > 1 and rec['weight'].sum() == 0:
                     log.warning("{0}: weights sum to zero!".format(table.name))
+
             if fields is not None:
                 try:
                     rec = rec[fields]
                 except Exception as e:
-                    print table
-                    print rec.shape
-                    print rec.dtype
+                    log.warning(table)
+                    log.warning(rec.shape)
+                    log.warning(rec.dtype)
                     print e
                     raise
             recs.append(rec)

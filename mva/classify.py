@@ -329,7 +329,7 @@ class Classifier(object):
                  spectators=None,
                  output_suffix="",
                  clf_output_suffix="",
-                 partition_key='EventNumber',
+                 partition_key='ditau_tau0_eta*100',#'EventNumber',
                  transform=True,
                  mmc=True):
 
